@@ -1,0 +1,13 @@
+#!/bin/zsh
+
+if [ -z "$JPP_LIB" ]; then
+    echo "ERROR: You have to source JPP first"
+else
+    echo "Setting variables for Online Software"    
+    if [ $# -eq 1 ]; then
+	export ONLINE_DIR=$1
+    else 
+	export ONLINE_DIR=$(pwd)/
+    fi    
+fi
+
