@@ -37,11 +37,11 @@ namespace KM3ONLINE
 
     JLANG::JSharedPointer<const JDETECTOR::JModuleRouter> router_;
     
-    mutable double coc_;  // center of charge, the charge weighted DOM z position.
-    mutable double tot_;  // total charge
-    mutable double charge_above_; // the charge observed by hits above the earlist hit pmt's z position
-    mutable double charge_below_; // the charge observed by hits below the earlist hit pmt's z position
-    mutable double charge_ratio_; // the ratio of charge_above to the total charge.
+    double coc_;  // center of charge, the charge weighted DOM z position.
+    double tot_;  // total charge
+    double charge_above_; // the charge observed by hits above the earlist hit pmt's z position
+    double charge_below_; // the charge observed by hits below the earlist hit pmt's z position
+    double charge_ratio_; // the ratio of charge_above to the total charge.
     double deltaPosZ_;
     
   public:
