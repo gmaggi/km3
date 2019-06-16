@@ -1,0 +1,271 @@
+#ifndef KM3ONLINE_MULTIVARIABLESCALCULATOR_INCLUDED
+#define KM3ONLINE_MULTIVARIABLESCALCULATOR_INCLUDED
+
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <fstream>
+#include <iostream>
+#include <cmath>
+#include <iterator>
+#include <numeric>
+#include <stdexcept>
+#include <limits>
+
+#include <boost/lexical_cast.hpp>
+
+#include "JDetector/JModuleRouter.hh"
+#include "JDetector/JPMTRouter.hh"
+#include "JDetector/JPMTIdentifier.hh"
+#include "JDetector/JPMT.hh"
+#include "JDAQ/JDAQEvent.hh"
+#include "JFit/JHistory.hh"
+#include "JFit/JEvt.hh"
+#include "JFit/JFitStatus.hh"
+#include "JGeometry3D/JVector3D.hh"
+#include "JGeometry3D/JAxis3D.hh"
+#include "JLang/JSharedPointer.hh"
+
+using namespace JPP;
+
+namespace KM3ONLINE
+{
+  class KM3OnlineMultiVariablesCalculator
+  {
+
+  private:
+
+    JLANG::JSharedPointer<const JDETECTOR::JModuleRouter> router_;
+    
+    mutable double coc_;  // center of charge, the charge weighted DOM z position.
+    mutable double tot_;  // total charge
+    mutable double charge_above_; // the charge observed by hits above the earlist hit pmt's z position
+    mutable double charge_below_; // the charge observed by hits below the earlist hit pmt's z position
+    mutable double charge_ratio_; // the ratio of charge_above to the total charge.
+    double deltaPosZ_;
+    
+  public:
+
+    KM3OnlineMultiVariablesCalculator()
+    {
+      coc_          = std::numeric_limits<double>::quiet_NaN();
+      tot_          = std::numeric_limits<double>::quiet_NaN();
+      charge_above_ = std::numeric_limits<double>::quiet_NaN();
+      charge_below_ = std::numeric_limits<double>::quiet_NaN();
+      charge_ratio_ = std::numeric_limits<double>::quiet_NaN();
+      deltaPosZ_    = std::numeric_limits<double>::quiet_NaN();
+    }
+    
+    KM3OnlineMultiVariablesCalculator(const JLANG::JSharedPointer<const JDETECTOR::JModuleRouter> &router):
+      router_(router)
+    {
+      coc_          = std::numeric_limits<double>::quiet_NaN();
+      tot_          = std::numeric_limits<double>::quiet_NaN();
+      charge_above_ = std::numeric_limits<double>::quiet_NaN();
+      charge_below_ = std::numeric_limits<double>::quiet_NaN();
+      charge_ratio_ = std::numeric_limits<double>::quiet_NaN();
+      deltaPosZ_    = std::numeric_limits<double>::quiet_NaN();
+    }
+
+    ~KM3OnlineMultiVariablesCalculator()
+    {};
+
+
+    // Calculators
+  
+    void CalculateDeltaPosZ(const std::vector<KM3NETDAQ::JDAQTriggeredHit> &hits,
+			    const double quartile=0.2);
+
+    template<class T>
+    void CalculateHitsObservables(const std::vector<T> &hits) const;
+
+
+    // Getters
+
+    double getCoC() const {
+      return coc_;
+    }
+
+    double getToT() const {
+      return tot_;
+    }
+
+    double getChargeAbove() const {
+      return charge_above_;
+    }
+
+    double getChargeBelow() const {
+      return charge_below_;
+    }
+
+    double getChargeRatio() const {
+      return charge_ratio_;
+    }
+
+    double getDeltaPosZ() const {
+      return deltaPosZ_;
+    }
+
+  };
+
+  struct Hit
+  {
+    double hit_charge;
+    double hit_time;
+    double hit_pmt_x;
+    double hit_pmt_y;
+    double hit_pmt_z;
+    Hit()
+    {
+       hit_charge=0.;
+       hit_time=0.;
+       hit_pmt_x=0.;
+       hit_pmt_y=0.;
+       hit_pmt_z=0.;
+    }
+    Hit(double hit_charge_in, double hit_time_in, double hit_pmt_x_in, double hit_pmt_y_in, double hit_pmt_z_in)
+    {
+       hit_charge=hit_charge_in;
+       hit_time=hit_time_in;
+       hit_pmt_x=hit_pmt_x_in;
+       hit_pmt_y=hit_pmt_y_in;
+       hit_pmt_z=hit_pmt_z_in;
+    }
+  }; 
+  inline bool compareTime(const Hit d1, const Hit d2)
+  {
+    double t1 = d1.hit_time;
+    double t2 = d2.hit_time;
+    return t1 < t2;
+  }
+
+}
+
+void 
+KM3ONLINE::KM3OnlineMultiVariablesCalculator::CalculateDeltaPosZ(const std::vector<KM3NETDAQ::JDAQTriggeredHit> &InHits,
+								 const double quartile) 
+{
+  using KM3NETDAQ::JDAQTriggeredHit;
+
+  std::vector<JDAQTriggeredHit> hits(InHits);
+  std::sort(hits.begin(),hits.end(),
+	    [](const JDAQTriggeredHit &lhs, const JDAQTriggeredHit &rhs) { return lhs.getT() < rhs.getT(); }
+	    );
+
+  if ( hits.empty() ){
+    std::cout<<"Empty vector of hits" << std::endl;
+    return;
+  }
+
+  const size_t n_quartile_hits=static_cast<size_t>(hits.size()*quartile);
+
+  JGEOMETRY3D::JVector3D accumulated_pos(0,0,0);
+  double accumulated_charge=0;
+
+  JGEOMETRY3D::JVector3D raccumulated_pos(0,0,0);
+  double raccumulated_charge=0;
+
+  size_t n_hits=1;
+  std::vector<JDAQTriggeredHit>::const_iterator hit=hits.begin();
+  std::vector<JDAQTriggeredHit>::const_reverse_iterator rhit=hits.rbegin();
+  for ( ; hit!=hits.end() ; hit++ , n_hits++){
+    //forward hits
+    const int om_id= hit->getModuleID();
+
+    if (not router_->hasModule(om_id)) {
+      const std::string str= boost::lexical_cast<std::string>(om_id);
+      throw std::out_of_range("OM ID: "+str+" is not in JModuleRouter at: "+__PRETTY_FUNCTION__);
+    }
+
+    const JDETECTOR::JModule &module= router_->getModule(om_id);
+    const JGEOMETRY3D::JVector3D &module_pos=module.getPosition();
+    const double charge=static_cast<double>(hit->getToT());
+
+    accumulated_pos += module_pos*charge;
+    accumulated_charge+= charge;
+
+    //backward hits
+    const int rom_id= rhit->getModuleID();
+
+    if (not router_->hasModule(rom_id)) {
+      const std::string str= boost::lexical_cast<std::string>(rom_id);
+      throw std::out_of_range("OM ID: "+str+" is not in JModuleRouter at: "+__PRETTY_FUNCTION__);
+    }
+
+    const JDETECTOR::JModule &rmodule= router_->getModule(rom_id);
+    const JGEOMETRY3D::JVector3D &rmodule_pos= rmodule.getPosition();
+    const double rcharge=static_cast<double>(rhit->getToT());
+
+    raccumulated_pos += rmodule_pos*rcharge;
+    raccumulated_charge+= rcharge;
+
+    if (n_hits == n_quartile_hits) break;
+    std::advance(rhit,1);
+  }
+
+  //fill deltaPos and check if this ok
+  raccumulated_pos = raccumulated_pos/raccumulated_charge;
+  accumulated_pos  = accumulated_pos/accumulated_charge;
+ 
+  deltaPosZ_ = accumulated_pos.getZ()-raccumulated_pos.getZ();
+}
+
+/**
+   calculates coc_, tot_, charge_above_, charge_below_, charge_ratio_.
+ */
+
+template<class T>
+void
+KM3ONLINE::KM3OnlineMultiVariablesCalculator::CalculateHitsObservables(const std::vector<T> &hits) const
+{
+  double totTimesPosZ(0); // sum of charge times dom position z
+  double tot(0); // total charge
+  std::vector<Hit> vecHits;
+  for (auto hit = hits.begin(); hit != hits.end(); ++hit){
+
+    const int om_id= hit->getModuleID();
+
+    if ( not router_->hasModule(om_id) ) {
+      const std::string str= boost::lexical_cast<std::string>(om_id);
+      throw std::out_of_range("OM ID: "+str+" is not in JModuleRouter at: "+__PRETTY_FUNCTION__);
+    }
+    const JDETECTOR::JModule &module= router_->getModule(om_id);
+    const JGEOMETRY3D::JVector3D &module_pos=module.getPosition();
+
+    totTimesPosZ += static_cast<double>( hit->getToT() ) * module_pos.getZ();
+    tot  += static_cast<double>( hit->getToT() );
+
+    // get hit pmt info, save to vecHits
+    const double charge=static_cast<double>(hit->getToT());
+    const double time = hit->getT();
+    const int pmt_id= hit->getPMT();
+    const JPMT &pmt = module.getPMT(pmt_id);
+    const JAxis3D &pmt_axis = pmt.getAxis();
+    const double pmt_x = pmt_axis.getX();
+    const double pmt_y = pmt_axis.getY();
+    const double pmt_z = pmt_axis.getZ();
+    Hit one_hit = Hit(charge, time, pmt_x, pmt_y, pmt_z);
+    vecHits.push_back(one_hit);
+  }
+  // sort hits by time
+  std::sort(vecHits.begin(), vecHits.end(), compareTime);
+  Hit firstHitAll = vecHits[0];
+  double firstHitPmtZ = firstHitAll.hit_pmt_z; // earliest hit's z position
+  double charge_above_firstHit(0); // charge above earliest hit's z position
+  for (unsigned int i =0;i<vecHits.size();++i){
+    if(vecHits[i].hit_pmt_z >= firstHitPmtZ){
+      charge_above_firstHit+=vecHits[i].hit_charge;
+    }
+  }
+  // get coc, the charge weighted center of dom z position
+  const double coc= totTimesPosZ/tot;
+  const double charge_below_firstHit = tot - charge_above_firstHit;
+  const double charge_ratio_above_firstHit = charge_above_firstHit/tot;
+  coc_ = coc;
+  tot_ = tot;
+  charge_above_ = charge_above_firstHit;
+  charge_below_ = charge_below_firstHit;
+  charge_ratio_ = charge_ratio_above_firstHit;
+}
+
+#endif

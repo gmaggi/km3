@@ -1,0 +1,46 @@
+cmake_minimum_required(VERSION 2.8)
+
+project(examples)
+
+set(CMAKE_CXX_FLAGS "-std=c++11 -O3")
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY $ENV{ONLINE_DIR}/examples/)
+	
+if (NOT EXISTS "$ENV{JPP_DIR}")
+   message(FATAL_ERROR "Could not find JPP_DIR environment variable")
+endif()
+
+if (NOT EXISTS "$ENV{JPP_LIB}")
+   message(FATAL_ERROR "Could not find JPP_LIB environment variable")
+endif()
+
+list(APPEND CMAKE_MODULE_PATH $ENV{ROOTSYS}/etc/cmake)
+list(APPEND CMAKE_PREFIX_PATH $ENV{ROOTSYS})
+find_package(ROOT REQUIRED COMPONENTS)
+
+include_directories(${ROOT_INCLUDE_DIRS})
+
+link_libraries(${ROOT_LIBRARIES})
+
+include_directories($ENV{JPP_DIR}/software/ $ENV{ONLINE_DIR}/)
+
+link_directories($ENV{JPP_LIB} $ENV{ONLINE_DIR}/lib/)
+
+link_libraries( -lz -lKM3NeTDAQROOT -levtROOT -llang -ltriggerROOT -lkm3onlineevent)	
+
+add_executable(KM3OnlineRead KM3OnlineRead.cc)
+add_executable(KM3OnlineReadGraphic KM3OnlineReadGraphic.cc)
+add_executable(KM3OnlineReadTag KM3OnlineReadTag.cc)
+add_executable(KM3OnlineReadGraphicTag KM3OnlineReadGraphicTag.cc)
+
+
+
+
+
+
+
+
+
+
+
+
