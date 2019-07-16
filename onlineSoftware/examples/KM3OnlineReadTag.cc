@@ -65,7 +65,7 @@ int main(int argc, const char *argv[])
 
     cout<<"DetID "<<detId<<" RUN "<<run<<" frameIndex "<<frameIndex<<" triggerCounter "<<triggerCounter<<" utc "<<utc<<endl;
 
-    cout<<"Track X: "<<tx<<" Y: "<<ty<<" Z: "<<tz\
+    cout<<"Tack X: "<<tx<<" Y: "<<ty<<" Z: "<<tz\
 	<<" DX: "<<tdx<<" DY: "<<tdy<<" DZ: "<<tdz\
 	<<" Energy: "<<te<<" Quality: "<<tq<<" Time: "<<tt\
 	<<" Type: "<<ttype<<" Status: "<<tstatus<<" NDF "<<tndf<<endl;
